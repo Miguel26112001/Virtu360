@@ -21,16 +21,20 @@
     {
       "id": "m1",
       "nodeId": "lobby",
+      "type": "info",
       "position": { "yaw": 0.5, "pitch": 0.1 },
       "tooltip": "Recepción",
-      "image": "/pin.png"
+      "title": "Área de Bienvenida",
+      "content": "Aquí puedes realizar tu check-in."
     },
     {
       "id": "m2",
       "nodeId": "terraza",
+      "type": "detail",
       "position": { "yaw": 1.2, "pitch": 0.2 },
       "tooltip": "Vista Panorámica",
-      "image": "/pin.png"
+      "title": "Especificaciones Técnicas",
+      "description": "Esta terraza cuenta con 50m2, baranda de vidrio templado y acabados en madera teca resistente a la intemperie."
     }
   ]
 }
