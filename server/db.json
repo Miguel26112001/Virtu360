@@ -1,0 +1,36 @@
+{
+  "nodes": [
+    {
+      "id": "lobby",
+      "panorama": "/panorama/panorama.jpg",
+      "thumbnail": "/thumbnails/panorama.webp",
+      "caption": "Lobby Principal"
+    },
+    {
+      "id": "terraza",
+      "panorama": "/panorama/terraza.jpg",
+      "thumbnail": "/thumbnails/terraza.webp",
+      "caption": "Terraza Exterior"
+    }
+  ],
+  "links": [
+    { "from": "lobby", "to": "terraza", "textureX": 1500, "textureY": 800 },
+    { "from": "terraza", "to": "lobby", "textureX": 3000, "textureY": 800 }
+  ],
+  "markers": [
+    {
+      "id": "m1",
+      "nodeId": "lobby",
+      "position": { "yaw": 0.5, "pitch": 0.1 },
+      "tooltip": "Recepción",
+      "image": "/pin.png"
+    },
+    {
+      "id": "m2",
+      "nodeId": "terraza",
+      "position": { "yaw": 1.2, "pitch": 0.2 },
+      "tooltip": "Vista Panorámica",
+      "image": "/pin.png"
+    }
+  ]
+}
