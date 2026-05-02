@@ -1,20 +1,21 @@
-import axios from 'axios';
+import httpInstance from "@/shared/services/http.instance.js";
 
-const API_URL = 'http://localhost:3000';
+const BASE = import.meta.env.VITE_NODES_ENDPOINT_PATH;
 
 export const nodeService = {
+
     async getNodeById(id) {
-        const { data } = await axios.get(`${API_URL}/nodes/${id}`);
+        const { data } = await httpInstance.get(`/${BASE}/${id}`);
         return data;
     },
 
     async getLinksByNodeId(nodeId) {
-        const { data } = await axios.get(`${API_URL}/links?from=${nodeId}`);
+        const { data } = await httpInstance.get(`/${BASE}/${nodeId}/links`);
         return data;
     },
 
     async getAllNodes() {
-        const { data } = await axios.get(`${API_URL}/nodes`);
+        const { data } = await httpInstance.get(`/${BASE}`);
         return data;
     }
 };

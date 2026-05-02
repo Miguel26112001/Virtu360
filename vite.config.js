@@ -15,4 +15,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    host: true,
+    allowedHosts: [
+      'anthology-emit-pouch.ngrok-free.dev',
+      '.ngrok-free.dev',
+      'localhost',
+      '127.0.0.1'
+    ],
+    port: 5173,
+  }
 })

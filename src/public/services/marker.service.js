@@ -1,10 +1,11 @@
-import axios from 'axios';
+import httpInstance from "@/shared/services/http.instance.js";
 
-const API_URL = 'http://localhost:3000';
+const BASE = import.meta.env.VITE_NODES_ENDPOINT_PATH;
 
 export const markerService = {
+
     async getMarkersByNodeId(nodeId) {
-        const { data } = await axios.get(`${API_URL}/markers?nodeId=${nodeId}`);
+        const { data } = await httpInstance.get(`/${BASE}/${nodeId}/markers`);
         return data;
     }
 };

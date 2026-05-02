@@ -3,7 +3,9 @@ import { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
 import { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
 import { AutorotatePlugin } from '@photo-sphere-viewer/autorotate-plugin';
 import { GalleryPlugin } from '@photo-sphere-viewer/gallery-plugin';
+import { GyroscopePlugin } from '@photo-sphere-viewer/gyroscope-plugin';
 
+import './CustomMarkerElement';
 import { nodeService } from './node.service';
 import { markerService } from './marker.service';
 
@@ -17,16 +19,16 @@ let currentViewer = null;
 
 const getPluginsConfig = (startNodeId) => [
     MarkersPlugin,
+    GyroscopePlugin,
     [VirtualTourPlugin, {
         dataMode: 'server',
         startNodeId: startNodeId,
         getNode: async (nodeId) => {
             const targetNodeId = String(nodeId);
 
-            const [nodeData, linksData, markersData] = await Promise.all([
+            const [nodeData, linksData] = await Promise.all([
                 nodeService.getNodeById(targetNodeId),
                 nodeService.getLinksByNodeId(targetNodeId),
-                markerService.getMarkersByNodeId(targetNodeId)
             ]);
 
             return {
@@ -35,14 +37,7 @@ const getPluginsConfig = (startNodeId) => [
                     nodeId: String(link.to),
                     position: { textureX: link.textureX, textureY: link.textureY }
                 })),
-                markers: markersData.map(marker => ({
-                    id: String(marker.id),
-                    position: marker.position,
-                    image: marker.image,
-                    size: { width: 32, height: 32 },
-                    anchor: 'bottom center',
-                    tooltip: marker.tooltip
-                }))
+                markers: []
             };
         }
     }],
@@ -167,14 +162,49 @@ async function refreshMarkers(viewer, nodeId) {
     if (!markersPlugin) return;
 
     const markersData = await markerService.getMarkersByNodeId(nodeId);
-    const newMarkers = markersData.map(marker => ({
-        id: String(marker.id),
-        position: marker.position,
-        image: marker.image,
-        size: { width: 32, height: 32 },
-        anchor: 'bottom center',
-        tooltip: marker.tooltip
-    }));
+
+    const newMarkers = markersData.map(marker => {
+        if (marker.type === 'info') {
+            const el = document.createElement('custom-marker');
+            el.innerHTML = `<h3>${marker.title}</h3><p>${marker.content}</p>`;
+            return {
+                id: String(marker.id),
+                position: marker.position,
+                element: el,
+                anchor: 'bottom center',
+                data: { type: 'info' }
+            };
+        }
+
+        if (marker.type === 'detail') {
+            return {
+                id: String(marker.id),
+                position: marker.position,
+                image: '/pin.png',
+                size: { width: 40, height: 40 },
+                anchor: 'bottom center',
+                tooltip: marker.tooltip,
+                data: { type: 'detail', payload: marker }
+            };
+        }
+
+        return {
+            id: String(marker.id),
+            position: marker.position,
+            image: '/pin.png',
+            size: { width: 32, height: 32 },
+            anchor: 'bottom center'
+        };
+    });
 
     markersPlugin.setMarkers(newMarkers);
+}
+
+export function initMarkerEvents(viewer, callback) {
+    const markersPlugin = viewer.getPlugin(MarkersPlugin);
+    markersPlugin.addEventListener('select-marker', ({ marker }) => {
+        if (marker.data?.type === 'detail') {
+            callback(marker.data.payload);
+        }
+    });
 }
