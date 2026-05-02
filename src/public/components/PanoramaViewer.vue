@@ -8,7 +8,7 @@ export default {
   props: {
     startNodeId: {
       type: String,
-      default: 'lobby'
+      default: '1'
     }
   },
 

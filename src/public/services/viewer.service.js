@@ -37,8 +37,6 @@ const getPluginsConfig = (startNodeId) => [
                     nodeId: String(link.to),
                     position: { textureX: link.textureX, textureY: link.textureY }
                 })),
-                // DEJAMOS ESTO VACÍO: Evita el error "missing marker content"
-                // Nuestra función refreshMarkers se encargará de pintarlos después
                 markers: []
             };
         }

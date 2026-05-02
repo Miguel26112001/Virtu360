@@ -20,7 +20,7 @@ export default {
     <main class="main-content">
       <!-- Sección Inmersiva -->
       <section class="viewer-section">
-        <PanoramaViewer startNodeId="lobby" class="main-viewer" />
+        <PanoramaViewer startNodeId="1" class="main-viewer" />
 
         <!-- Texto flotante sobre el visor -->
         <div class="viewer-content">
