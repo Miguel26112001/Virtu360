@@ -25,7 +25,25 @@
       "position": { "yaw": 0.5, "pitch": 0.1 },
       "tooltip": "Recepción",
       "title": "Área de Bienvenida",
-      "content": "Aquí puedes realizar tu check-in."
+      "content": "Personal disponible las 24 horas para asistirte."
+    },
+    {
+      "id": "m3",
+      "nodeId": "lobby",
+      "type": "info",
+      "position": { "yaw": 1.5, "pitch": -0.2 },
+      "tooltip": "Ascensores",
+      "title": "Acceso a Habitaciones",
+      "content": "Contamos con 4 ascensores de alta velocidad."
+    },
+    {
+      "id": "m4",
+      "nodeId": "lobby",
+      "type": "detail",
+      "position": { "yaw": 2.8, "pitch": 0.05 },
+      "tooltip": "Zona Lounge",
+      "title": "Mobiliario Premium",
+      "description": "El área de descanso cuenta con sofás de cuero italiano y mesas de mármol de Carrara, diseñados por arquitectos locales."
     },
     {
       "id": "m2",
@@ -35,6 +53,33 @@
       "tooltip": "Vista Panorámica",
       "title": "Especificaciones Técnicas",
       "description": "Esta terraza cuenta con 50m2, baranda de vidrio templado y acabados en madera teca resistente a la intemperie."
+    },
+    {
+      "id": "m5",
+      "nodeId": "terraza",
+      "type": "info",
+      "position": { "yaw": 0.8, "pitch": -0.1 },
+      "tooltip": "Bar Exterior",
+      "title": "Mixología de Autor",
+      "content": "Abierto de 18:00 a 02:00 con cócteles exclusivos."
+    },
+    {
+      "id": "m6",
+      "nodeId": "terraza",
+      "type": "info",
+      "position": { "yaw": 4.5, "pitch": 0.3 },
+      "tooltip": "Piscina",
+      "title": "Piscina Climatizada",
+      "content": "Temperatura regulada a 28°C durante todo el año."
+    },
+    {
+      "id": "m7",
+      "nodeId": "terraza",
+      "type": "detail",
+      "position": { "yaw": 5.2, "pitch": -0.1 },
+      "tooltip": "Iluminación Nocturna",
+      "title": "Sistema Smart Light",
+      "description": "El sistema de iluminación LED es controlado por sensores de luz natural, reduciendo el consumo energético en un 40%."
     }
   ]
 }

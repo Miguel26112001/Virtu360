@@ -3,6 +3,7 @@ import { VirtualTourPlugin } from '@photo-sphere-viewer/virtual-tour-plugin';
 import { MarkersPlugin } from '@photo-sphere-viewer/markers-plugin';
 import { AutorotatePlugin } from '@photo-sphere-viewer/autorotate-plugin';
 import { GalleryPlugin } from '@photo-sphere-viewer/gallery-plugin';
+import { GyroscopePlugin } from '@photo-sphere-viewer/gyroscope-plugin';
 
 import './CustomMarkerElement';
 import { nodeService } from './node.service';
@@ -18,6 +19,7 @@ let currentViewer = null;
 
 const getPluginsConfig = (startNodeId) => [
     MarkersPlugin,
+    GyroscopePlugin,
     [VirtualTourPlugin, {
         dataMode: 'server',
         startNodeId: startNodeId,
