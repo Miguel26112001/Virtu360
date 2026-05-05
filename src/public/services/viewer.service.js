@@ -35,7 +35,10 @@ const getPluginsConfig = (startNodeId) => [
                 ...nodeData,
                 links: linksData.map(link => ({
                     nodeId: String(link.to),
-                    position: { textureX: link.textureX, textureY: link.textureY }
+                    position: {
+                        yaw: link.yaw,
+                        pitch: link.pitch
+                    }
                 })),
                 markers: []
             };
