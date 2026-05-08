@@ -143,8 +143,7 @@ async function refreshMarkers(viewer, projectId, nodeId) {
         const baseConfig = {
             id: String(marker.id),
             position: marker.position,
-            tooltip: marker.tooltip || marker.title,
-            size: { width: 32, height: 32 },
+            size: { width: 40, height: 40 },
             anchor: 'bottom center',
             data: { payload: marker }
         };
@@ -154,19 +153,38 @@ async function refreshMarkers(viewer, projectId, nodeId) {
                 return {
                     ...baseConfig,
                     image: 'https://img.icons8.com/color/48/info.png',
-                    size: { width: 32, height: 32 }
+                    className: 'non-clickable-marker',
+                    tooltip: {
+                        content: `
+                            <div class="custom-tooltip">
+                                <h3>${marker.title || 'Información'}</h3>
+                                ${marker.summary ? `<p class="summary"><strong>${marker.summary}</strong></p>` : ''}
+                                ${marker.content ? `<div class="content">${marker.content}</div>` : ''}
+                                ${marker.description ? `<p class="desc">${marker.description}</p>` : ''}
+                            </div>
+                        `,
+                        position: 'top center',
+                        className: 'info-tooltip-container'
+                    }
                 };
             case 'VIDEO':
                 return {
                     ...baseConfig,
                     image: 'https://img.icons8.com/color/48/video.png',
-                    size: { width: 40, height: 40 }
+                    tooltip: marker.title || 'Ver Video'
                 };
+
+            case 'GALLERY':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/stack-of-photos.png',
+                    tooltip: marker.title || 'Ver Galería de Fotos'
+                };
+
             default:
                 return {
                     ...baseConfig,
                     image: 'https://img.icons8.com/color/48/marker.png',
-                    size: { width: 32, height: 32 }
                 };
         }
     });
@@ -182,8 +200,12 @@ export function initMarkerEvents(viewer, callback) {
     if (!markersPlugin) return;
 
     markersPlugin.addEventListener('select-marker', ({ marker }) => {
-        if (marker.data?.payload) {
-            callback(marker.data.payload);
+        const payload = marker.data?.payload;
+
+        if (payload && payload.type !== 'INFO') {
+            callback(payload);
+        } else {
+            console.log("Clic en InfoMarker ignorado (solo lectura).");
         }
     });
 }

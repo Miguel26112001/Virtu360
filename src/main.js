@@ -20,7 +20,7 @@ import {
     ProgressSpinner,
     Toast,
     ConfirmDialog,
-    Tooltip, Dialog
+    Tooltip, Dialog, Galleria
 } from "primevue";
 
 const MyPreset = definePreset(Aura, {
@@ -65,6 +65,7 @@ app
     .component('Toast', Toast)
     .component('ConfirmDialog', ConfirmDialog)
     .component('Dialog', Dialog)
+    .component('Galleria', Galleria)
 
     .directive('tooltip', Tooltip)
 
