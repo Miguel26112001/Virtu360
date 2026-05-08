@@ -6,9 +6,13 @@ export default {
   name: 'PanoramaViewer',
 
   props: {
+    projectId: {
+      type: String,
+      required: true
+    },
     startNodeId: {
       type: String,
-      default: '1'
+      required: true
     }
   },
 
@@ -17,7 +21,8 @@ export default {
       viewerInstance: null,
       isLoading: true,
       hasError: false,
-      selectedMarker: null
+      selectedMarker: null,
+      showModal: false
     }
   },
 
@@ -28,6 +33,11 @@ export default {
       console.error("Error al inicializar el tour virtual:", error);
       this.hasError = true;
       this.isLoading = false;
+      this.$toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudo conectar con el servidor 360.'
+      });
     }
   },
 
@@ -53,7 +63,11 @@ export default {
 
   methods: {
     initViewer() {
-      this.viewerInstance = createViewer(this.$refs.viewerContainer, this.startNodeId);
+      this.viewerInstance = createViewer(
+          this.$refs.viewerContainer,
+          this.projectId,
+          this.startNodeId
+      );
 
       this.viewerInstance.addEventListener('ready', () => {
         this.isLoading = false;
@@ -66,10 +80,12 @@ export default {
 
     openDetailModal(data) {
       this.selectedMarker = data;
+      this.showModal = true;
     },
 
     closeModal() {
-      this.selectedMarker = null;
+      this.showModal = false;
+      setTimeout(() => { this.selectedMarker = null; }, 300);
     }
   }
 }
@@ -77,36 +93,40 @@ export default {
 
 <template>
   <div class="viewer-wrapper">
-    <!-- Overlay de carga -->
-    <div v-if="isLoading" class="overlay loader">
-      <div class="spinner"></div>
-      <p>Cargando entorno 360...</p>
+
+    <div v-if="isLoading" class="overlay loader bg-black-alpha-90 text-white">
+      <ProgressSpinner strokeWidth="4" />
+      <p class="mt-3 font-bold">Cargando experiencia 360...</p>
     </div>
 
-    <!-- Mensaje de error -->
-    <div v-if="hasError" class="overlay error">
-      <p>No se pudo cargar el recorrido. Revisa la conexión al servidor.</p>
+    <div v-if="hasError" class="overlay error bg-red-900 text-white p-4">
+      <i class="pi pi-exclamation-triangle text-4xl mb-3"></i>
+      <p>No se pudo cargar el recorrido virtual.</p>
+      <Button label="Volver" icon="pi pi-arrow-left" class="mt-3 p-button-text text-white" @click="$router.push('/')" />
     </div>
 
-    <!-- Modal de Detalle (Se activa cuando selectedMarker tiene datos) -->
-    <Transition name="fade">
-      <div v-if="selectedMarker" class="modal-overlay" @click.self="closeModal">
-        <div class="modal-content">
-          <button class="close-btn" @click="closeModal">&times;</button>
-
-          <h2>{{ selectedMarker.title }}</h2>
-          <div class="modal-body">
-            <p>{{ selectedMarker.description }}</p>
-          </div>
-
-          <div class="modal-footer">
-            <button class="primary-btn" @click="closeModal">Entendido</button>
-          </div>
+    <Dialog
+        v-model:visible="showModal"
+        :header="selectedMarker?.title || 'Información'"
+        modal
+        :style="{ width: '90vw', maxWidth: '500px' }"
+        :draggable="false"
+        :dismissableMask="true"
+    >
+      <div v-if="selectedMarker" class="p-1">
+        <div v-if="selectedMarker.type === 'VIDEO'" class="mb-3 border-round overflow-hidden">
+          <iframe v-if="selectedMarker.videoUrl" width="100%" height="250" :src="selectedMarker.videoUrl" frameborder="0" allowfullscreen></iframe>
         </div>
-      </div>
-    </Transition>
 
-    <!-- Contenedor del Visor -->
+        <p class="line-height-3 text-700 m-0">
+          {{ selectedMarker.description || selectedMarker.content || 'Sin descripción disponible.' }}
+        </p>
+      </div>
+      <template #footer>
+        <Button label="Cerrar" icon="pi pi-check" @click="closeModal" autofocus />
+      </template>
+    </Dialog>
+
     <div
         ref="viewerContainer"
         class="viewer"
@@ -120,84 +140,20 @@ export default {
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  min-height: 500px;
+  background: #000;
 }
 
 .viewer {
   width: 100%;
   height: 100%;
-  background: #1a1a1a;
-  transition: opacity 0.5s ease;
+  background: #000;
 }
 
 .is-hidden {
   opacity: 0;
 }
 
-/* Estilos para el Modal */
-.modal-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background: white;
-  width: 90%;
-  max-width: 500px;
-  border-radius: 16px;
-  padding: 2rem;
-  position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  text-align: left;
-}
-
-.close-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #666;
-}
-
-.modal-body {
-  margin: 1.5rem 0;
-  color: #4a5568;
-  line-height: 1.6;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.primary-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  padding: 0.6rem 1.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-/* Transiciones */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
-/* Spinner y otros estilos existentes... */
 .overlay {
   position: absolute;
   inset: 0;
@@ -205,20 +161,6 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 10;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  z-index: 100;
 }
 </style>

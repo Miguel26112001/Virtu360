@@ -5,50 +5,62 @@ import { AutorotatePlugin } from '@photo-sphere-viewer/autorotate-plugin';
 import { GalleryPlugin } from '@photo-sphere-viewer/gallery-plugin';
 import { GyroscopePlugin } from '@photo-sphere-viewer/gyroscope-plugin';
 
-import './CustomMarkerElement';
-import { nodeService } from './node.service';
-import { markerService } from './marker.service';
+import { NodeService } from './node.service';
+import { MarkerService } from './marker.service';
+import { LinkService } from './link.service';
 
 import '@photo-sphere-viewer/core/index.css';
 import '@photo-sphere-viewer/virtual-tour-plugin/index.css';
 import '@photo-sphere-viewer/markers-plugin/index.css';
 import '@photo-sphere-viewer/gallery-plugin/index.css';
 
+const nodeService = new NodeService();
+const markerService = new MarkerService();
+const linkService = new LinkService();
+
 /** @type {Viewer|null} */
 let currentViewer = null;
 
-const getPluginsConfig = (startNodeId) => [
+const getPluginsConfig = (projectId, startNodeId) => [
     MarkersPlugin,
     GyroscopePlugin,
     [VirtualTourPlugin, {
         dataMode: 'server',
-        startNodeId: startNodeId,
+        startNodeId: startNodeId ? String(startNodeId) : null,
         getNode: async (nodeId) => {
+            if (!nodeId || nodeId === 'undefined') {
+                console.warn("VirtualTour intentó cargar un nodo undefined. Abortando petición.");
+                return null;
+            }
+
             const targetNodeId = String(nodeId);
 
             const [nodeData, linksData] = await Promise.all([
-                nodeService.getNodeById(targetNodeId),
-                nodeService.getLinksByNodeId(targetNodeId),
+                nodeService.getNodeById(projectId, targetNodeId),
+                linkService.getLinksByNodeId(projectId, targetNodeId),
             ]);
 
+            console.log("Datos del nodo recibidos:", nodeData);
+
             return {
-                ...nodeData,
+                id: nodeData.id,
+                panorama: nodeData.panoramaUrl,
+                thumbnail: nodeData.thumbnailUrl,
+                name: nodeData.caption,
                 links: linksData.map(link => ({
-                    nodeId: String(link.to),
+                    nodeId: String(link.toNodeId),
                     position: {
                         yaw: link.yaw,
                         pitch: link.pitch
                     }
-                })),
-                markers: []
+                }))
             };
         }
     }],
     [AutorotatePlugin, {
         autostartDelay: 2000,
         autostartOnIdle: true,
-        autorotateSpeed: '1rpm',
-        autorotatePitch: '0deg',
+        autorotateSpeed: '1rpm'
     }],
     [GalleryPlugin, {
         visibleOnLoad: false,
@@ -56,41 +68,52 @@ const getPluginsConfig = (startNodeId) => [
     }]
 ];
 
-export function createViewer(container, startNodeId) {
+export function createViewer(container, projectId, startNodeId) {
     const viewer = new Viewer({
         container,
-        panorama: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-        plugins: getPluginsConfig(startNodeId)
+        panorama: null,
+        plugins: getPluginsConfig(projectId, startNodeId)
     });
 
-    loadGalleryItems(viewer).catch(err => console.error("Init error:", err));
+    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
+
+    setTimeout(() => {
+        if (startNodeId && virtualTour) {
+            virtualTour.setCurrentNode(startNodeId)
+                .then(() => {
+                    viewer.needsUpdate();
+                })
+                .catch(err => console.error("Error al cargar nodo inicial:", err));
+        }
+    }, 100);
+
+    loadGalleryItems(viewer, projectId).catch(err => console.error("Init error:", err));
+
+    virtualTour.addEventListener('node-changed', ({ node }) => {
+        if (node?.id) {
+            refreshMarkers(viewer, projectId, node.id);
+        }
+    });
+
     currentViewer = viewer;
     return viewer;
-}
-
-export function toggleGallery(viewer) {
-    const instance = viewer || currentViewer;
-    if (instance) {
-        /** @type {GalleryPlugin} */
-        const gallery = instance.getPlugin(GalleryPlugin);
-        if (gallery) gallery.toggle();
-    }
 }
 
 /**
  * Fetches all nodes and populates the Gallery Plugin.
  * @param {Viewer} viewer
+ * @param {string} projectId
  */
-async function loadGalleryItems(viewer) {
-    const nodes = await nodeService.getAllNodes();
+async function loadGalleryItems(viewer, projectId) {
+    const nodes = await nodeService.getNodesByProjectId(projectId);
     const gallery = viewer.getPlugin(GalleryPlugin);
     const virtualTour = viewer.getPlugin(VirtualTourPlugin);
 
     const galleryItems = nodes.map(node => ({
         id: String(node.id),
         name: node.caption,
-        thumbnail: node.thumbnail,
-        panorama: node.panorama,
+        thumbnail: node.thumbnailUrl,
+        panorama: node.panoramaUrl,
         options: { caption: node.caption }
     }));
 
@@ -101,7 +124,9 @@ async function loadGalleryItems(viewer) {
 
         const setTourAsReady = (nodeId) => {
             isTourReady = true;
-            refreshMarkers(viewer, nodeId);
+            if (nodeId && nodeId !== 'undefined') {
+                refreshMarkers(viewer, projectId, nodeId);
+            }
         };
 
         virtualTour.addEventListener('ready', () => setTourAsReady(virtualTour.currentNode?.id));
@@ -141,73 +166,76 @@ async function loadGalleryItems(viewer) {
  */
 async function handleGalleryNavigation(viewer, itemId) {
     const virtualTour = viewer.getPlugin(VirtualTourPlugin);
-    const markersPlugin = viewer.getPlugin(MarkersPlugin);
-    const stringId = String(itemId);
-
-    if (markersPlugin) {
-        markersPlugin.clearMarkers();
-    }
-
-    await virtualTour.setCurrentNode(stringId, { transition: false });
+    if (!virtualTour) return;
 
     try {
-        await virtualTour.setCurrentNode(stringId);
-
-        viewer.needsUpdate();
-
+        await virtualTour.setCurrentNode(String(itemId));
     } catch (error) {
-        throw error;
+        console.error("Error al navegar desde la galería:", error);
     }
 }
 
-async function refreshMarkers(viewer, nodeId) {
+async function refreshMarkers(viewer, projectId, nodeId) {
     const markersPlugin = viewer.getPlugin(MarkersPlugin);
     if (!markersPlugin) return;
 
-    const markersData = await markerService.getMarkersByNodeId(nodeId);
+    markersPlugin.clearMarkers();
+    const markersData = await markerService.getMarkersByNodeId(projectId, nodeId);
 
     const newMarkers = markersData.map(marker => {
-        if (marker.type === 'info') {
-            const el = document.createElement('custom-marker');
-            el.innerHTML = `<h3>${marker.title}</h3><p>${marker.content}</p>`;
-            return {
-                id: String(marker.id),
-                position: marker.position,
-                element: el,
-                anchor: 'bottom center',
-                data: { type: 'info' }
-            };
-        }
-
-        if (marker.type === 'detail') {
-            return {
-                id: String(marker.id),
-                position: marker.position,
-                image: '/pin.png',
-                size: { width: 40, height: 40 },
-                anchor: 'bottom center',
-                tooltip: marker.tooltip,
-                data: { type: 'detail', payload: marker }
-            };
-        }
-
-        return {
+        const baseConfig = {
             id: String(marker.id),
             position: marker.position,
-            image: '/pin.png',
+            tooltip: marker.tooltip || marker.title,
             size: { width: 32, height: 32 },
-            anchor: 'bottom center'
+            anchor: 'bottom center',
+            data: { payload: marker }
         };
+
+        switch (marker.type) {
+            case 'INFO':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/info.png',
+                    size: { width: 32, height: 32 }
+                };
+            case 'VIDEO':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/video.png',
+                    size: { width: 40, height: 40 }
+                };
+            default:
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/marker.png',
+                    size: { width: 32, height: 32 }
+                };
+        }
     });
 
     markersPlugin.setMarkers(newMarkers);
 }
 
+/**
+ * Inicializa los eventos de clic en marcadores para que la UI de Vue pueda reaccionar
+ */
 export function initMarkerEvents(viewer, callback) {
     const markersPlugin = viewer.getPlugin(MarkersPlugin);
+    if (!markersPlugin) return;
+
     markersPlugin.addEventListener('select-marker', ({ marker }) => {
-        if (marker.data?.type === 'detail') {
+        if (marker.data?.payload) {
             callback(marker.data.payload);
         }
     });
+}
+
+export function toggleGallery(viewer) {
+    const instance = viewer || currentViewer;
+    if (instance) {
+        /** @type {GalleryPlugin} */
+        const gallery = instance.getPlugin(GalleryPlugin);
+        if (gallery) gallery.toggle();
+    }
 }

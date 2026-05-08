@@ -1,21 +1,34 @@
 import httpInstance from "@/shared/services/http.instance.js";
+import { Node } from "@/public/model/node.entity.js";
 
-const BASE = import.meta.env.VITE_NODES_ENDPOINT_PATH;
+const PROJECTS_PATH = import.meta.env.VITE_PROJECTS_ENDPOINT_PATH;
+const NODES_PATH = import.meta.env.VITE_NODES_ENDPOINT_PATH;
 
-export const nodeService = {
+export class NodeService {
 
-    async getNodeById(id) {
-        const { data } = await httpInstance.get(`/${BASE}/${id}`);
-        return data;
-    },
+    /**
+     * Helper privado para construir la URL base: /projects/{projectId}/nodes
+     */
+    _getNodesUrl(projectId) {
+        return `/${PROJECTS_PATH}/${projectId}/${NODES_PATH}`;
+    }
 
-    async getLinksByNodeId(nodeId) {
-        const { data } = await httpInstance.get(`/${BASE}/${nodeId}/links`);
-        return data;
-    },
+    // =========================================================
+    // NODES
+    // =========================================================
 
-    async getAllNodes() {
-        const { data } = await httpInstance.get(`/${BASE}`);
-        return data;
+    async getNodesByProjectId(projectId) {
+        const response = await httpInstance.get(this._getNodesUrl(projectId));
+        return response.data.map(item => Node.fromResponse(item));
+    }
+
+    async getNodeById(projectId, nodeId) {
+        const response = await httpInstance.get(`${this._getNodesUrl(projectId)}/${nodeId}`);
+        return Node.fromResponse(response.data);
+    }
+
+    async getAllNodesByProjectId(projectId) {
+        const response = await httpInstance.get(`${this._getNodesUrl(projectId)}`);
+        return Node.fromResponse(response.data);
     }
 };
