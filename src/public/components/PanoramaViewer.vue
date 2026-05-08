@@ -6,9 +6,13 @@ export default {
   name: 'PanoramaViewer',
 
   props: {
+    projectId: {
+      type: String,
+      required: true
+    },
     startNodeId: {
       type: String,
-      default: '1'
+      required: true
     }
   },
 
@@ -17,7 +21,13 @@ export default {
       viewerInstance: null,
       isLoading: true,
       hasError: false,
-      selectedMarker: null
+      selectedMarker: null,
+      showModal: false,
+      galleriaResponsiveOptions: [
+        { breakpoint: '1024px', numVisible: 5 },
+        { breakpoint: '768px', numVisible: 3 },
+        { breakpoint: '560px', numVisible: 1 }
+      ]
     }
   },
 
@@ -28,6 +38,11 @@ export default {
       console.error("Error al inicializar el tour virtual:", error);
       this.hasError = true;
       this.isLoading = false;
+      this.$toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudo conectar con el servidor 360.'
+      });
     }
   },
 
@@ -53,7 +68,11 @@ export default {
 
   methods: {
     initViewer() {
-      this.viewerInstance = createViewer(this.$refs.viewerContainer, this.startNodeId);
+      this.viewerInstance = createViewer(
+          this.$refs.viewerContainer,
+          this.projectId,
+          this.startNodeId
+      );
 
       this.viewerInstance.addEventListener('ready', () => {
         this.isLoading = false;
@@ -66,9 +85,37 @@ export default {
 
     openDetailModal(data) {
       this.selectedMarker = data;
+      this.showModal = true;
     },
 
     closeModal() {
+      this.showModal = false;
+      setTimeout(() => { this.selectedMarker = null; }, 300);
+    },
+
+    formatVideoUrl(url) {
+      if (!url) return '';
+
+      let videoId = '';
+
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1].split('?')[0];
+      }
+      else if (url.includes('v=')) {
+        videoId = url.split('v=')[1].split('&')[0];
+      }
+      else if (url.includes('embed/')) {
+        return url;
+      }
+
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}?rel=0&autoplay=1`;
+      }
+
+      return url;
+    },
+
+    onModalHide() {
       this.selectedMarker = null;
     }
   }
@@ -77,36 +124,75 @@ export default {
 
 <template>
   <div class="viewer-wrapper">
-    <!-- Overlay de carga -->
-    <div v-if="isLoading" class="overlay loader">
-      <div class="spinner"></div>
-      <p>Cargando entorno 360...</p>
+
+    <div v-if="isLoading" class="overlay loader bg-black-alpha-90 text-white">
+      <ProgressSpinner strokeWidth="4" />
+      <p class="mt-3 font-bold">Cargando experiencia 360...</p>
     </div>
 
-    <!-- Mensaje de error -->
-    <div v-if="hasError" class="overlay error">
-      <p>No se pudo cargar el recorrido. Revisa la conexión al servidor.</p>
+    <div v-if="hasError" class="overlay error bg-red-900 text-white p-4">
+      <i class="pi pi-exclamation-triangle text-4xl mb-3"></i>
+      <p>No se pudo cargar el recorrido virtual.</p>
+      <Button label="Volver" icon="pi pi-arrow-left" class="mt-3 p-button-text text-white" @click="$router.push('/')" />
     </div>
 
-    <!-- Modal de Detalle (Se activa cuando selectedMarker tiene datos) -->
-    <Transition name="fade">
-      <div v-if="selectedMarker" class="modal-overlay" @click.self="closeModal">
-        <div class="modal-content">
-          <button class="close-btn" @click="closeModal">&times;</button>
+    <Dialog
+        v-model:visible="showModal"
+        modal
+        :draggable="false"
+        :dismissableMask="true"
+        class="premium-dialog"
+        @hide="onModalHide"
+        :style="{ width: '90vw', maxWidth: '800px' }"
+    >
+      <template #header>
+        <div class="dialog-header">
+          <span class="category-tag">{{ selectedMarker?.type }}</span>
+          <h2 class="dialog-title">{{ selectedMarker?.title || 'Detalles' }}</h2>
+        </div>
+      </template>
 
-          <h2>{{ selectedMarker.title }}</h2>
-          <div class="modal-body">
-            <p>{{ selectedMarker.description }}</p>
-          </div>
+      <div v-if="selectedMarker" class="dialog-body">
 
-          <div class="modal-footer">
-            <button class="primary-btn" @click="closeModal">Entendido</button>
+        <div v-if="selectedMarker.type === 'VIDEO'" class="visual-container shadow-4">
+          <iframe
+              :src="formatVideoUrl(selectedMarker.videoUrl)"
+              width="100%"
+              height="100%"
+              frameborder="0"
+          ></iframe>
+        </div>
+
+        <div v-if="selectedMarker.type === 'GALLERY' && selectedMarker.imageUrls?.length" class="visual-container shadow-4">
+          <Galleria
+              :value="selectedMarker.imageUrls"
+              :responsiveOptions="galleriaResponsiveOptions"
+              :numVisible="5"
+              containerStyle="width: 100%"
+              :showThumbnails="selectedMarker.imageUrls.length > 1"
+              :showItemNavigators="true"
+              :showItemNavigatorsOnHover="false"
+              :circular="true"
+              :autoPlay="true"
+              :transitionInterval="4000"
+          >
+            <template #item="slotProps">
+              <img :src="slotProps.item" style="width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover;" />
+            </template>
+            <template #thumbnail="slotProps">
+              <img :src="slotProps.item" style="width: 50px; display: block; border-radius: 4px;" />
+            </template>
+          </Galleria>
+        </div>
+
+        <div class="content-container mt-4">
+          <div v-if="selectedMarker.summary" class="summary-box">
+            <p>{{ selectedMarker.summary }}</p>
           </div>
         </div>
       </div>
-    </Transition>
+    </Dialog>
 
-    <!-- Contenedor del Visor -->
     <div
         ref="viewerContainer"
         class="viewer"
@@ -120,84 +206,20 @@ export default {
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  min-height: 500px;
+  background: #000;
 }
 
 .viewer {
   width: 100%;
   height: 100%;
-  background: #1a1a1a;
-  transition: opacity 0.5s ease;
+  background: #000;
 }
 
 .is-hidden {
   opacity: 0;
 }
 
-/* Estilos para el Modal */
-.modal-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background: white;
-  width: 90%;
-  max-width: 500px;
-  border-radius: 16px;
-  padding: 2rem;
-  position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  text-align: left;
-}
-
-.close-btn {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #666;
-}
-
-.modal-body {
-  margin: 1.5rem 0;
-  color: #4a5568;
-  line-height: 1.6;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.primary-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  padding: 0.6rem 1.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-/* Transiciones */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
-/* Spinner y otros estilos existentes... */
 .overlay {
   position: absolute;
   inset: 0;
@@ -205,20 +227,127 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: 100;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #3498db;
+.info-tooltip-container .psv-tooltip-content {
+  padding: 0; /* Quitamos el padding por defecto para controlar el diseño */
+  max-width: 250px;
+}
+
+.custom-tooltip {
+  padding: 12px;
+  font-family: sans-serif;
+  color: #333;
+}
+
+.custom-tooltip h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #007bff;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+
+.custom-tooltip .summary {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.custom-tooltip .content {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #555;
+}
+
+.custom-tooltip .desc {
+  font-size: 11px;
+  font-style: italic;
+  color: #888;
+  margin-top: 8px;
+}
+
+:deep(.non-clickable-marker) {
+  cursor: default !important;
+}
+
+:deep(.non-clickable-marker) {
+  cursor: default !important;
+}
+
+:deep(.psv-marker:not(.non-clickable-marker)) {
+  cursor: pointer !important;
+}
+
+.description-section {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+:deep(.p-galleria) {
+  border: none;
+}
+
+:deep(.p-galleria-item-wrapper) {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+:deep(.p-galleria-thumbnail-container) {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 1rem;
+  border-radius: 0 0 12px 12px;
+}
+
+:deep(.p-galleria-item-prev),
+:deep(.p-galleria-item-next) {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 4rem;
+  height: 4rem;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  transition: background-color 0.3s;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+:deep(.p-galleria-item-prev:hover),
+:deep(.p-galleria-item-next:hover) {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+:deep(.premium-dialog .p-dialog-content) {
+  padding-bottom: 2rem;
+}
+
+.visual-container {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+
+.visual-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.summary-box {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+
+.summary-box p {
+  font-size: 1.1rem;
+  color: #4b5563;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.dialog-body {
+  padding-top: 1rem;
 }
 </style>

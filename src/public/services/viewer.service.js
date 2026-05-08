@@ -5,50 +5,62 @@ import { AutorotatePlugin } from '@photo-sphere-viewer/autorotate-plugin';
 import { GalleryPlugin } from '@photo-sphere-viewer/gallery-plugin';
 import { GyroscopePlugin } from '@photo-sphere-viewer/gyroscope-plugin';
 
-import './CustomMarkerElement';
-import { nodeService } from './node.service';
-import { markerService } from './marker.service';
+import { NodeService } from './node.service';
+import { MarkerService } from './marker.service';
+import { LinkService } from './link.service';
 
 import '@photo-sphere-viewer/core/index.css';
 import '@photo-sphere-viewer/virtual-tour-plugin/index.css';
 import '@photo-sphere-viewer/markers-plugin/index.css';
 import '@photo-sphere-viewer/gallery-plugin/index.css';
 
+const nodeService = new NodeService();
+const markerService = new MarkerService();
+const linkService = new LinkService();
+
 /** @type {Viewer|null} */
 let currentViewer = null;
 
-const getPluginsConfig = (startNodeId) => [
+const getPluginsConfig = (projectId, startNodeId) => [
     MarkersPlugin,
     GyroscopePlugin,
     [VirtualTourPlugin, {
         dataMode: 'server',
-        startNodeId: startNodeId,
+        startNodeId: startNodeId ? String(startNodeId) : null,
         getNode: async (nodeId) => {
+            if (!nodeId || nodeId === 'undefined') {
+                console.warn("VirtualTour intentó cargar un nodo undefined. Abortando petición.");
+                return null;
+            }
+
             const targetNodeId = String(nodeId);
 
             const [nodeData, linksData] = await Promise.all([
-                nodeService.getNodeById(targetNodeId),
-                nodeService.getLinksByNodeId(targetNodeId),
+                nodeService.getNodeById(projectId, targetNodeId),
+                linkService.getLinksByNodeId(projectId, targetNodeId),
             ]);
 
+            console.log("Datos del nodo recibidos:", nodeData);
+
             return {
-                ...nodeData,
+                id: nodeData.id,
+                panorama: nodeData.panoramaUrl,
+                thumbnail: nodeData.thumbnailUrl,
+                name: nodeData.caption,
                 links: linksData.map(link => ({
-                    nodeId: String(link.to),
+                    nodeId: String(link.toNodeId),
                     position: {
                         yaw: link.yaw,
                         pitch: link.pitch
                     }
-                })),
-                markers: []
+                }))
             };
         }
     }],
     [AutorotatePlugin, {
         autostartDelay: 2000,
         autostartOnIdle: true,
-        autorotateSpeed: '1rpm',
-        autorotatePitch: '0deg',
+        autorotateSpeed: '1rpm'
     }],
     [GalleryPlugin, {
         visibleOnLoad: false,
@@ -56,16 +68,146 @@ const getPluginsConfig = (startNodeId) => [
     }]
 ];
 
-export function createViewer(container, startNodeId) {
+export function createViewer(container, projectId, startNodeId) {
     const viewer = new Viewer({
         container,
         panorama: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-        plugins: getPluginsConfig(startNodeId)
+        plugins: getPluginsConfig(projectId, startNodeId)
     });
 
-    loadGalleryItems(viewer).catch(err => console.error("Init error:", err));
+    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
+
+    virtualTour.addEventListener('node-changed', ({ node }) => {
+        if (node?.id) {
+            console.log("Nodo cambiado, refrescando markers para:", node.id);
+            refreshMarkers(viewer, projectId, node.id);
+
+            const gallery = viewer.getPlugin(GalleryPlugin);
+            if (gallery) {
+                gallery.currentId = node.id;
+            }
+        }
+    });
+
+    loadGalleryItems(viewer, projectId).catch(err => console.error("Init error:", err));
+
     currentViewer = viewer;
     return viewer;
+}
+
+/**
+ * Fetches all nodes and populates the Gallery Plugin.
+ * @param {Viewer} viewer
+ * @param {string} projectId
+ */
+async function loadGalleryItems(viewer, projectId) {
+    const nodes = await nodeService.getNodesByProjectId(projectId);
+    const gallery = viewer.getPlugin(GalleryPlugin);
+    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
+
+    if (!gallery || !virtualTour) return;
+
+    const galleryItems = nodes.map(node => ({
+        id: String(node.id),
+        name: node.caption,
+        thumbnail: node.thumbnailUrl,
+        panorama: node.panoramaUrl,
+        options: { caption: node.caption }
+    }));
+
+    const galleryHandler = (itemId) => {
+        const targetId = String(itemId);
+
+        console.log("Gallery Handler ejecutado para nodo:", targetId);
+
+        if (virtualTour.currentNode?.id !== targetId) {
+            virtualTour.setCurrentNode(targetId).catch(err => {
+                if (err.name !== 'AbortError') console.error("Error en navegación:", err);
+            });
+        }
+
+        gallery.hide();
+    };
+
+    gallery.setItems(galleryItems, galleryHandler);
+}
+
+async function refreshMarkers(viewer, projectId, nodeId) {
+    const markersPlugin = viewer.getPlugin(MarkersPlugin);
+    if (!markersPlugin) return;
+
+    markersPlugin.clearMarkers();
+    const markersData = await markerService.getMarkersByNodeId(projectId, nodeId);
+
+    const newMarkers = markersData.map(marker => {
+        const baseConfig = {
+            id: String(marker.id),
+            position: marker.position,
+            size: { width: 40, height: 40 },
+            anchor: 'bottom center',
+            data: { payload: marker }
+        };
+
+        switch (marker.type) {
+            case 'INFO':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/info.png',
+                    className: 'non-clickable-marker',
+                    tooltip: {
+                        content: `
+                            <div class="custom-tooltip">
+                                <h3>${marker.title || 'Información'}</h3>
+                                ${marker.summary ? `<p class="summary"><strong>${marker.summary}</strong></p>` : ''}
+                                ${marker.content ? `<div class="content">${marker.content}</div>` : ''}
+                                ${marker.description ? `<p class="desc">${marker.description}</p>` : ''}
+                            </div>
+                        `,
+                        position: 'top center',
+                        className: 'info-tooltip-container'
+                    }
+                };
+            case 'VIDEO':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/video.png',
+                    tooltip: marker.title || 'Ver Video'
+                };
+
+            case 'GALLERY':
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/stack-of-photos.png',
+                    tooltip: marker.title || 'Ver Galería de Fotos'
+                };
+
+            default:
+                return {
+                    ...baseConfig,
+                    image: 'https://img.icons8.com/color/48/marker.png',
+                };
+        }
+    });
+
+    markersPlugin.setMarkers(newMarkers);
+}
+
+/**
+ * Inicializa los eventos de clic en marcadores para que la UI de Vue pueda reaccionar
+ */
+export function initMarkerEvents(viewer, callback) {
+    const markersPlugin = viewer.getPlugin(MarkersPlugin);
+    if (!markersPlugin) return;
+
+    markersPlugin.addEventListener('select-marker', ({ marker }) => {
+        const payload = marker.data?.payload;
+
+        if (payload && payload.type !== 'INFO') {
+            callback(payload);
+        } else {
+            console.log("Clic en InfoMarker ignorado (solo lectura).");
+        }
+    });
 }
 
 export function toggleGallery(viewer) {
@@ -75,139 +217,4 @@ export function toggleGallery(viewer) {
         const gallery = instance.getPlugin(GalleryPlugin);
         if (gallery) gallery.toggle();
     }
-}
-
-/**
- * Fetches all nodes and populates the Gallery Plugin.
- * @param {Viewer} viewer
- */
-async function loadGalleryItems(viewer) {
-    const nodes = await nodeService.getAllNodes();
-    const gallery = viewer.getPlugin(GalleryPlugin);
-    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
-
-    const galleryItems = nodes.map(node => ({
-        id: String(node.id),
-        name: node.caption,
-        thumbnail: node.thumbnail,
-        panorama: node.panorama,
-        options: { caption: node.caption }
-    }));
-
-    if (gallery && virtualTour) {
-        gallery.setItems(galleryItems);
-
-        let isTourReady = !!virtualTour.currentNode;
-
-        const setTourAsReady = (nodeId) => {
-            isTourReady = true;
-            refreshMarkers(viewer, nodeId);
-        };
-
-        virtualTour.addEventListener('ready', () => setTourAsReady(virtualTour.currentNode?.id));
-        virtualTour.addEventListener('node-changed', ({ node }) => setTourAsReady(node.id));
-
-        const safeNavigate = async (itemId) => {
-            const targetId = String(itemId);
-
-            if (virtualTour.currentNode?.id === targetId) return;
-
-            if (!isTourReady) {
-                setTimeout(() => safeNavigate(targetId), 500);
-                return;
-            }
-
-            try {
-                isTourReady = false;
-                await handleGalleryNavigation(viewer, targetId);
-            } catch (err) {
-                isTourReady = true;
-            }
-        };
-
-        gallery.addEventListener('select-item', ({ itemId }) => safeNavigate(itemId));
-
-        viewer.container.addEventListener('click', (event) => {
-            const item = event.target.closest('.psv-gallery-item');
-            if (item) safeNavigate(item.dataset.psvGalleryItem);
-        }, true);
-
-        if (virtualTour.currentNode) setTourAsReady(virtualTour.currentNode.id);
-    }
-}
-
-/**
- * Logic to execute when a gallery item is picked
- */
-async function handleGalleryNavigation(viewer, itemId) {
-    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
-    const markersPlugin = viewer.getPlugin(MarkersPlugin);
-    const stringId = String(itemId);
-
-    if (markersPlugin) {
-        markersPlugin.clearMarkers();
-    }
-
-    await virtualTour.setCurrentNode(stringId, { transition: false });
-
-    try {
-        await virtualTour.setCurrentNode(stringId);
-
-        viewer.needsUpdate();
-
-    } catch (error) {
-        throw error;
-    }
-}
-
-async function refreshMarkers(viewer, nodeId) {
-    const markersPlugin = viewer.getPlugin(MarkersPlugin);
-    if (!markersPlugin) return;
-
-    const markersData = await markerService.getMarkersByNodeId(nodeId);
-
-    const newMarkers = markersData.map(marker => {
-        if (marker.type === 'info') {
-            const el = document.createElement('custom-marker');
-            el.innerHTML = `<h3>${marker.title}</h3><p>${marker.content}</p>`;
-            return {
-                id: String(marker.id),
-                position: marker.position,
-                element: el,
-                anchor: 'bottom center',
-                data: { type: 'info' }
-            };
-        }
-
-        if (marker.type === 'detail') {
-            return {
-                id: String(marker.id),
-                position: marker.position,
-                image: '/pin.png',
-                size: { width: 40, height: 40 },
-                anchor: 'bottom center',
-                tooltip: marker.tooltip,
-                data: { type: 'detail', payload: marker }
-            };
-        }
-
-        return {
-            id: String(marker.id),
-            position: marker.position,
-            image: '/pin.png',
-            size: { width: 32, height: 32 },
-            anchor: 'bottom center'
-        };
-    });
-
-    markersPlugin.setMarkers(newMarkers);
-}
-
-export function initMarkerEvents(viewer, callback) {
-    const markersPlugin = viewer.getPlugin(MarkersPlugin);
-    markersPlugin.addEventListener('select-marker', ({ marker }) => {
-        if (marker.data?.type === 'detail') {
-            callback(marker.data.payload);
-        }
-    });
 }
