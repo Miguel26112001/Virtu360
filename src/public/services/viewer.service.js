@@ -71,29 +71,25 @@ const getPluginsConfig = (projectId, startNodeId) => [
 export function createViewer(container, projectId, startNodeId) {
     const viewer = new Viewer({
         container,
-        panorama: null,
+        panorama: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
         plugins: getPluginsConfig(projectId, startNodeId)
     });
 
     const virtualTour = viewer.getPlugin(VirtualTourPlugin);
 
-    setTimeout(() => {
-        if (startNodeId && virtualTour) {
-            virtualTour.setCurrentNode(startNodeId)
-                .then(() => {
-                    viewer.needsUpdate();
-                })
-                .catch(err => console.error("Error al cargar nodo inicial:", err));
-        }
-    }, 100);
-
-    loadGalleryItems(viewer, projectId).catch(err => console.error("Init error:", err));
-
     virtualTour.addEventListener('node-changed', ({ node }) => {
         if (node?.id) {
+            console.log("Nodo cambiado, refrescando markers para:", node.id);
             refreshMarkers(viewer, projectId, node.id);
+
+            const gallery = viewer.getPlugin(GalleryPlugin);
+            if (gallery) {
+                gallery.currentId = node.id;
+            }
         }
     });
+
+    loadGalleryItems(viewer, projectId).catch(err => console.error("Init error:", err));
 
     currentViewer = viewer;
     return viewer;
@@ -109,6 +105,8 @@ async function loadGalleryItems(viewer, projectId) {
     const gallery = viewer.getPlugin(GalleryPlugin);
     const virtualTour = viewer.getPlugin(VirtualTourPlugin);
 
+    if (!gallery || !virtualTour) return;
+
     const galleryItems = nodes.map(node => ({
         id: String(node.id),
         name: node.caption,
@@ -117,62 +115,21 @@ async function loadGalleryItems(viewer, projectId) {
         options: { caption: node.caption }
     }));
 
-    if (gallery && virtualTour) {
-        gallery.setItems(galleryItems);
+    const galleryHandler = (itemId) => {
+        const targetId = String(itemId);
 
-        let isTourReady = !!virtualTour.currentNode;
+        console.log("Gallery Handler ejecutado para nodo:", targetId);
 
-        const setTourAsReady = (nodeId) => {
-            isTourReady = true;
-            if (nodeId && nodeId !== 'undefined') {
-                refreshMarkers(viewer, projectId, nodeId);
-            }
-        };
+        if (virtualTour.currentNode?.id !== targetId) {
+            virtualTour.setCurrentNode(targetId).catch(err => {
+                if (err.name !== 'AbortError') console.error("Error en navegación:", err);
+            });
+        }
 
-        virtualTour.addEventListener('ready', () => setTourAsReady(virtualTour.currentNode?.id));
-        virtualTour.addEventListener('node-changed', ({ node }) => setTourAsReady(node.id));
+        gallery.hide();
+    };
 
-        const safeNavigate = async (itemId) => {
-            const targetId = String(itemId);
-
-            if (virtualTour.currentNode?.id === targetId) return;
-
-            if (!isTourReady) {
-                setTimeout(() => safeNavigate(targetId), 500);
-                return;
-            }
-
-            try {
-                isTourReady = false;
-                await handleGalleryNavigation(viewer, targetId);
-            } catch (err) {
-                isTourReady = true;
-            }
-        };
-
-        gallery.addEventListener('select-item', ({ itemId }) => safeNavigate(itemId));
-
-        viewer.container.addEventListener('click', (event) => {
-            const item = event.target.closest('.psv-gallery-item');
-            if (item) safeNavigate(item.dataset.psvGalleryItem);
-        }, true);
-
-        if (virtualTour.currentNode) setTourAsReady(virtualTour.currentNode.id);
-    }
-}
-
-/**
- * Logic to execute when a gallery item is picked
- */
-async function handleGalleryNavigation(viewer, itemId) {
-    const virtualTour = viewer.getPlugin(VirtualTourPlugin);
-    if (!virtualTour) return;
-
-    try {
-        await virtualTour.setCurrentNode(String(itemId));
-    } catch (error) {
-        console.error("Error al navegar desde la galería:", error);
-    }
+    gallery.setItems(galleryItems, galleryHandler);
 }
 
 async function refreshMarkers(viewer, projectId, nodeId) {
